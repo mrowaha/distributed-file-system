@@ -1,0 +1,91 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+
+package hdfs;
+
+
+option go_package = "../api;api";
+
+
+message FileChunk {
+    bytes data = 1; // chunk data
+    int64 chunk_number = 2; // chunk number for ordering
+    bool is_last = 3; // indicates whether the given chunk is the last chunk
+}
+
+
+// file creation primitives
+enum CreateFileStatus {
+    STATUS_UNSPECIFIED = 0;  // Default value, unspecified status
+    SUCCESS = 1;             // File creation succeeded
+    FAILURE = 2;             // File creation failed
+}
+
+message CreateFileRequest {
+    string file_name = 1; // name of the file to be created
+    FileChunk chunk = 2; // chunk of the file
+    int64 total_chunks = 3; // number of total chunks
+}
+
+message CreateFileResponse {
+    string file_name = 1; // name of the file created
+    CreateFileStatus status = 2; // status of file creation
+}
+
+service HdfsMasterService {
+    rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
+}
+
+
+// heart beat primitives
+message DataNodeFileMeta {
+    string fileName = 1;
+    repeated int64 chunks = 2;
+}
+
+enum HeartBeatStatus {
+    DEFAULT = 0;
+    OK = 1;
+}
+
+message HeartBeatRequest {
+    reserved 1;
+    
+    string id = 2;
+    repeated DataNodeFileMeta meta = 3;
+    float size = 4;
+}
+
+message HeartBeatResponse {
+    HeartBeatStatus status = 1;
+}
+
+message RegisterRequest {
+    // data node will initially create a connection to master and send
+    // its data
+    string id = 1; // data node will uniquely identify itself in the cluster
+    bool new = 2; // dat anode will set to true so that the master node will allocate this node the name
+    float size = 3;
+    repeated DataNodeFileMeta meta = 4;
+}
+
+enum FileAction {
+    UNSPECIFIED = 0;
+    UPLOAD_CHUNK = 1;
+    REGISTER = 2;
+}
+
+message FileActionResponse {
+    // used by master service to stream chunks to data nodes
+    FileChunk chunk = 1;
+    string fileName = 2;
+    FileAction action = 3;
+    google.protobuf.Timestamp timestamp = 4;
+    string datanodeId = 5;
+}
+
+service HdfsDataNodeService {
+    rpc Heartbeat(HeartBeatRequest) returns (HeartBeatResponse);
+    rpc Connect(RegisterRequest) returns (stream FileActionResponse); // master will stream chunks
+    rpc PipeHeartbeat(stream HeartBeatRequest) returns (stream HeartBeatResponse);
+}
