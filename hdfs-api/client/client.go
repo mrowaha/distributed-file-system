@@ -82,7 +82,6 @@ func (c *hdfsClientImpl) CreateFile(filePath string, fileName string) error {
 				Data:        buf[:bytesRead],
 			},
 		}
-
 		if err := stream.Send(req); err != nil {
 			logger.Printf("failed to send chunk %d: %v", chunkNumber, err)
 			return err

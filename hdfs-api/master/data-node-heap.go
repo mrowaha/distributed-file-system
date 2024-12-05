@@ -2,26 +2,31 @@ package master
 
 import (
 	"container/heap"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/mrowaha/hdfs-api/api"
-	common "github.com/mrowaha/hdfs-api/common"
+	"github.com/mrowaha/hdfs-api/common"
 )
 
 // Item represents an element in the heap
 type DataStreamHeapElement struct {
-	DataNodeSize    float64
-	DataNodeId      string
-	DataNodeReqChan chan common.Chunk
-	LastHeartBeat   time.Time
-	DataNodeMeta    []*api.DataNodeFileMeta
+	DataNodeSize      float64
+	DataNodeId        string
+	DataNodeReqChan   chan common.MasterAction
+	DataNodeCloseChan chan struct{}
+	DataNodeResChan   chan bool // if true then it is a success
+	LastHeartBeat     time.Time
+	LastAccess        time.Time
+	DataNodeMeta      []*api.DataNodeFileMeta
 }
 
 // MinHeap implements heap.Interface and holds Items
 type MinHeap []*DataStreamHeapElement
 
 func (h *MinHeap) ResetHeartbeat(nodeId string) {
+	fmt.Println(*h)
 	idx := slices.IndexFunc(*h, func(c *DataStreamHeapElement) bool {
 		return c.DataNodeId == nodeId
 	})
@@ -54,7 +59,7 @@ func (h MinHeap) Len() int {
 }
 
 func (h MinHeap) Less(i, j int) bool {
-	return h[i].DataNodeSize < h[j].DataNodeSize
+	return h[i].LastAccess.Before(h[j].LastAccess)
 }
 
 func (h MinHeap) Swap(i, j int) {

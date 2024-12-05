@@ -29,11 +29,13 @@ func NewHdfsDataNode(conn *grpc.ClientConn, store DataNodeStore) IHdfsDataNode {
 }
 
 func (c *HdfsDataNode) heartBeat(wg *sync.WaitGroup) {
+	wg.Add(1)
 	go func() {
 		ctx := context.Background()
 		// now start
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		defer wg.Done()
 		for {
 			select {
 			case <-ticker.C: // Wait for the next tick
@@ -137,9 +139,7 @@ func (c *HdfsDataNode) Connect() error {
 
 	// register first heart beat now
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
 	c.heartBeat(wg)
-	defer wg.Done()
 
 	for {
 		resp, err := stream.Recv()

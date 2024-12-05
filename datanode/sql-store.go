@@ -18,7 +18,7 @@ type DataNodeSqlStore struct {
 }
 
 func NewDataNodeSqlStore() *DataNodeSqlStore {
-	db, err := sql.Open("sqlite3", "data_node.db")
+	db, err := sql.Open("sqlite3", os.Getenv("DBFile"))
 	if err != nil {
 		log.Fatalf("data node could not establish db connection: %v", err)
 	}
@@ -207,7 +207,7 @@ func (s *DataNodeSqlStore) Meta() (meta []*hdfsDataNode.DataNodeFileMeta, err er
 }
 
 func (s *DataNodeSqlStore) Size() float64 {
-	fileInfo, err := os.Stat("data_node.db")
+	fileInfo, err := os.Stat(os.Getenv("DBFile"))
 	if err != nil {
 		log.Fatalf("Error getting file info: %v\n", err)
 	}

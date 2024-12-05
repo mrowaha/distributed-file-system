@@ -1,39 +1,41 @@
 import time
 import zmq
 import json
-import esdbclient
-from uuid  import uuid4
-
-esdb = esdbclient.EventStoreDBClient(
-    uri="esdb://admin:changeit@localhost:2113?tls=false"
-)
-event = esdbclient.NewEvent(
-    id=uuid4(),
-    type="TestEvent",
-    data=b"test event"
-)
+import fs_events as fs
+import argparse
+from typing import TypedDict
+from broker_logger import logger
 
 
-esdb.append_to_stream(
-    "hdfs-file-system",
-    events=[event],
-    current_version=esdbclient.StreamState.ANY
-)
+def main(*, reset: bool = False):
+    fsStore : fs.FsEventStore = fs.FsEventStore()
+    fsStore.createProjectionState()
+    if (reset):
+        fsStore.reset()
+    logger.info(f"stream name: {fsStore.fsStream}")
 
-context = zmq.Context()
-masterNodeSocket = context.socket(zmq.REP)
-masterNodeSocket.bind("tcp://*:5555")
-print("master node broker listening on port 5555")
+    context = zmq.Context()
+    masterNodeSocket = context.socket(zmq.REP)
+    masterNodeSocket.bind("tcp://*:5555")
 
-while True:
-    #  Wait for next request from client
-    message = masterNodeSocket.recv()
-    print("Received request: %s" % message)
+    while True:
+        #  Wait for next request from client
+        message = masterNodeSocket.recv()
+        print("Received request: %s" % message)
+        masterNodeSocket.send_string(json.dumps({"status": "ok"}))
 
-    #  Do some 'work'
-    time.sleep(1)
-    events = esdb.get_stream("hdfs-file-system")
-    for event in events:
-        print(event)
-    #  Send reply back to client
-    masterNodeSocket.send_string(json.dumps({"status": "ok"}))
+
+class Args(TypedDict, total=False):
+    reset: bool
+
+default_args = {
+    "reset": False
+}
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-r", "--reset", action="store_true" ,help="reset fs event stream")
+    args =  Args({**default_args, **vars(ap.parse_args())})
+    main(
+        reset=args['reset']
+    )
