@@ -8,9 +8,10 @@ option go_package = "../api;api";
 
 
 message FileChunk {
+    reserved 3;
     bytes data = 1; // chunk data
     int64 chunk_number = 2; // chunk number for ordering
-    bool is_last = 3; // indicates whether the given chunk is the last chunk
+    int64 total_chunks = 4;
 }
 
 
@@ -32,15 +33,39 @@ message CreateFileResponse {
     CreateFileStatus status = 2; // status of file creation
 }
 
-service HdfsMasterService {
-    rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
+message DeleteFileRequest {
+    string file_name = 1;
 }
 
+message DeleteFileReponse {
+    bool status = 1;
+}
+
+message NodesWithChunksRequest {
+    string file_name = 1;
+}
+
+message NodesWithChunksResponse {
+    message NodeWithChunk {
+        reserved 2;
+        repeated int64 chunks = 1;
+        string service = 3;
+    }
+    repeated NodeWithChunk nodes = 1;
+    int64 total_chunks = 2;
+}
+
+service HdfsMasterService {
+    rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileReponse);
+    rpc ReadNodesWithChunks(NodesWithChunksRequest) returns (NodesWithChunksResponse);
+}
 
 // heart beat primitives
 message DataNodeFileMeta {
     string fileName = 1;
     repeated int64 chunks = 2;
+    int64 total_chunks = 3;
 }
 
 enum HeartBeatStatus {
@@ -67,12 +92,14 @@ message RegisterRequest {
     bool new = 2; // dat anode will set to true so that the master node will allocate this node the name
     float size = 3;
     repeated DataNodeFileMeta meta = 4;
+    string service = 5;
 }
 
 enum FileAction {
     UNSPECIFIED = 0;
     UPLOAD_CHUNK = 1;
     REGISTER = 2;
+    DELETE_FILE = 3;
 }
 
 message FileActionResponse {
@@ -82,10 +109,31 @@ message FileActionResponse {
     FileAction action = 3;
     google.protobuf.Timestamp timestamp = 4;
     string datanodeId = 5;
+    repeated string fs_state = 6;
 }
 
 service HdfsDataNodeService {
     rpc Heartbeat(HeartBeatRequest) returns (HeartBeatResponse);
     rpc Connect(RegisterRequest) returns (stream FileActionResponse); // master will stream chunks
     rpc PipeHeartbeat(stream HeartBeatRequest) returns (stream HeartBeatResponse);
+}
+
+
+message SendChunkRequest {
+    reserved 2;
+    string file_name = 1;
+    repeated int64 chunk_numbers = 3;
+}
+
+message SendChunkRespose {
+    reserved 1;
+    message ChunkData {
+        int64 number = 1;
+        bytes data = 2;
+    }
+    repeated ChunkData chunk_data = 2;
+}
+
+service HdfsChunkService {
+    rpc SendChunk(SendChunkRequest) returns (SendChunkRespose);
 }

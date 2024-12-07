@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/mrowaha/hdfs-api/api"
 	hdfsCommon "github.com/mrowaha/hdfs-api/common"
 	hdfsDataNode "github.com/mrowaha/hdfs-api/node"
 )
@@ -33,6 +35,7 @@ func (s *DataNodeSqlStore) BootStrap() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		file_name TEXT NOT NULL,
 		chunk_number INTEGER NOT NULL,
+		total_chunks INTEGER NOT NULL,
 		chunk_data BLOB NOT NULL		
 	);	
 	CREATE TABLE IF NOT EXISTS datanode_meta (
@@ -49,13 +52,13 @@ func (s *DataNodeSqlStore) Has(fileName string) (chunkNumbers []int64, err error
 	return make([]int64, 0), nil
 }
 
-func (s *DataNodeSqlStore) Write(fileName string, chunkNumber int64, chunk []byte) error {
+func (s *DataNodeSqlStore) Write(fileName string, chunkNumber int64, totalChunks int64, chunk []byte) error {
 	query := `
-		INSERT INTO datanode (file_name, chunk_number, chunk_data)
-		VALUES (?, ?, ?);
+		INSERT INTO datanode (file_name, chunk_number, total_chunks, chunk_data)
+		VALUES (?, ?, ?, ?);
 	`
 
-	_, err := s.db.Exec(query, fileName, chunkNumber, chunk)
+	_, err := s.db.Exec(query, fileName, chunkNumber, totalChunks, chunk)
 	if err != nil {
 		return fmt.Errorf("failed to write data to datanode table: %w", err)
 	}
@@ -65,7 +68,7 @@ func (s *DataNodeSqlStore) Write(fileName string, chunkNumber int64, chunk []byt
 
 func (s *DataNodeSqlStore) Read(fileName string) ([]*hdfsCommon.Chunk, error) {
 	query := `
-		SELECT chunk_number, chunk_data
+		SELECT chunk_number, total_chunks, chunk_data
 		FROM datanode
 		WHERE file_name = ?
 		ORDER BY chunk_number ASC;
@@ -81,9 +84,10 @@ func (s *DataNodeSqlStore) Read(fileName string) ([]*hdfsCommon.Chunk, error) {
 
 	for rows.Next() {
 		var chunkNumber int64
+		var totalChunks int64
 		var chunkData []byte
 
-		if err := rows.Scan(&chunkNumber, &chunkData); err != nil {
+		if err := rows.Scan(&chunkNumber, &totalChunks, &chunkData); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
@@ -91,6 +95,7 @@ func (s *DataNodeSqlStore) Read(fileName string) ([]*hdfsCommon.Chunk, error) {
 			FileName:    fileName,
 			Data:        chunkData,
 			ChunkNumber: chunkNumber,
+			TotalChunks: totalChunks,
 		})
 	}
 
@@ -99,6 +104,49 @@ func (s *DataNodeSqlStore) Read(fileName string) ([]*hdfsCommon.Chunk, error) {
 	}
 
 	return chunks, nil
+}
+
+func (s *DataNodeSqlStore) ReadChunks(fileName string, chunks []int64) ([]*api.SendChunkRespose_ChunkData, error) {
+	if len(chunks) == 0 {
+		return nil, fmt.Errorf("no chunks specified")
+	}
+
+	// Create placeholders for the IN clause
+	placeholders := make([]string, len(chunks))
+	args := make([]interface{}, len(chunks)+1) // +1 for fileName
+	args[0] = fileName
+
+	for i, chunk := range chunks {
+		placeholders[i] = "?"
+		args[i+1] = chunk
+	}
+
+	query := fmt.Sprintf(`
+        SELECT chunk_number, chunk_data
+        FROM datanode
+        WHERE file_name = ? AND chunk_number IN (%s);
+    `, strings.Join(placeholders, ","))
+
+	// Execute the query
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query datanode table for chunk: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*api.SendChunkRespose_ChunkData
+	for rows.Next() {
+		var chunkData []byte
+		var chunkNumber int64
+		if err := rows.Scan(&chunkNumber, &chunkData); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		result = append(result, &api.SendChunkRespose_ChunkData{
+			Number: chunkNumber,
+			Data:   chunkData,
+		})
+	}
+	return result, nil
 }
 
 func (s *DataNodeSqlStore) Me() (uuid.UUID, error) {
@@ -165,7 +213,7 @@ func (s *DataNodeSqlStore) Meta() (meta []*hdfsDataNode.DataNodeFileMeta, err er
 			return nil, fmt.Errorf("failed to scan row for filename: %w", err)
 		}
 		query := `
-			SELECT chunk_number
+			SELECT chunk_number, total_chunks
 			FROM datanode
 			WHERE file_name = ?
 			ORDER BY chunk_number ASC;
@@ -178,10 +226,10 @@ func (s *DataNodeSqlStore) Meta() (meta []*hdfsDataNode.DataNodeFileMeta, err er
 		defer chunkrows.Close()
 
 		var chunks []int64
-
+		var totalChunks int64
 		for chunkrows.Next() {
 			var chunkNumber int64
-			if err := chunkrows.Scan(&chunkNumber); err != nil {
+			if err := chunkrows.Scan(&chunkNumber, &totalChunks); err != nil {
 				return nil, fmt.Errorf("failed to scan row: %w", err)
 			}
 			chunks = append(chunks, chunkNumber)
@@ -191,9 +239,12 @@ func (s *DataNodeSqlStore) Meta() (meta []*hdfsDataNode.DataNodeFileMeta, err er
 			return nil, fmt.Errorf("error during rows iteration: %w", err)
 		}
 
+		fmt.Println("total ", totalChunks)
+
 		fileMeta := &hdfsDataNode.DataNodeFileMeta{
-			FileName: currFileName,
-			Chunks:   chunks,
+			FileName:    currFileName,
+			Chunks:      chunks,
+			TotalChunks: totalChunks,
 		}
 
 		meta = append(meta, fileMeta)
@@ -212,4 +263,42 @@ func (s *DataNodeSqlStore) Size() float64 {
 		log.Fatalf("Error getting file info: %v\n", err)
 	}
 	return float64(fileInfo.Size())
+}
+
+func (s *DataNodeSqlStore) ListFiles() ([]string, error) {
+	fileNamesQuery := `
+		SELECT DISTINCT file_name
+		FROM datanode;
+	`
+
+	rows, err := s.db.Query(fileNamesQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query filenames from datanode table: %w", err)
+	}
+	defer rows.Close()
+
+	fsState := make([]string, 0)
+	var currFileName string
+	for rows.Next() {
+		if err := rows.Scan(&currFileName); err != nil {
+			return nil, fmt.Errorf("failed to scan row for filename: %w", err)
+		}
+		fsState = append(fsState, currFileName)
+	}
+
+	return fsState, nil
+}
+
+func (s *DataNodeSqlStore) DeleteChunks(fileName string) error {
+	query := `
+		DELETE FROM datanode
+		WHERE file_name = ?;
+	`
+
+	_, err := s.db.Exec(query, fileName)
+	if err != nil {
+		return fmt.Errorf("failed to delete chunks for file %s: %w", fileName, err)
+	}
+
+	return nil
 }

@@ -2,7 +2,6 @@ package master
 
 import (
 	"container/heap"
-	"fmt"
 	"slices"
 	"time"
 
@@ -14,19 +13,19 @@ import (
 type DataStreamHeapElement struct {
 	DataNodeSize      float64
 	DataNodeId        string
-	DataNodeReqChan   chan common.MasterAction
-	DataNodeCloseChan chan struct{}
+	DataNodeReqChan   chan<- common.MasterAction
+	DataNodeCloseChan <-chan struct{}
 	DataNodeResChan   chan bool // if true then it is a success
 	LastHeartBeat     time.Time
 	LastAccess        time.Time
 	DataNodeMeta      []*api.DataNodeFileMeta
+	DataNodeService   string
 }
 
 // MinHeap implements heap.Interface and holds Items
 type MinHeap []*DataStreamHeapElement
 
 func (h *MinHeap) ResetHeartbeat(nodeId string) {
-	fmt.Println(*h)
 	idx := slices.IndexFunc(*h, func(c *DataStreamHeapElement) bool {
 		return c.DataNodeId == nodeId
 	})

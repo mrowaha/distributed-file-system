@@ -3,6 +3,7 @@ package broker
 const (
 	DeleteFile = iota
 	CreateFile
+	CurrState
 )
 
 type __Broker_Event struct {
@@ -16,7 +17,8 @@ type __Event_DeleteFile struct {
 
 type __Event_CreateFile struct {
 	__Broker_Event
-	FileName string `json:"file_name"`
+	FileName    string `json:"file_name"`
+	TotalChunks int    `json:"total_chunks"`
 }
 
 func NewBrokerEvent(eventType int, data ...interface{}) interface{} {
@@ -28,12 +30,17 @@ func NewBrokerEvent(eventType int, data ...interface{}) interface{} {
 	} else if eventType == CreateFile {
 		return &__Event_CreateFile{
 			FileName:       data[0].(string),
+			TotalChunks:    data[1].(int),
 			__Broker_Event: __Broker_Event{Event: "create_file"},
+		}
+	} else if eventType == CurrState {
+		return &__Broker_Event{
+			Event: "curr_state",
 		}
 	}
 	return nil
 }
 
 type Broker interface {
-	DispatchEvent(chan<- struct{}, interface{}) error
+	DispatchEvent(chan<- interface{}, interface{}) error
 }

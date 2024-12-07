@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"sync"
 
 	"google.golang.org/grpc"
 
@@ -11,7 +12,7 @@ import (
 func main() {
 	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("failed to connect: %v", err)
 	}
 	defer conn.Close()
 
@@ -19,5 +20,9 @@ func main() {
 	datanodeStore.BootStrap()
 
 	datanode := hdfsdataNode.NewHdfsDataNode(conn, datanodeStore)
+
+	wg := &sync.WaitGroup{}
+	datanode.BeginService(wg)
 	datanode.Connect()
+	wg.Wait()
 }

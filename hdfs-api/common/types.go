@@ -6,6 +6,7 @@ type Chunk struct {
 	FileName    string
 	Data        []byte
 	ChunkNumber int64
+	TotalChunks int64
 }
 
 type MasterAction struct {

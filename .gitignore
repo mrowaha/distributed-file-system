@@ -1,2 +1,6 @@
 # python env
 /broker/env
+/datanode/daemon/env
+
+# pycache
+__pycache__

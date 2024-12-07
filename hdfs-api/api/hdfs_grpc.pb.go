@@ -19,7 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HdfsMasterService_CreateFile_FullMethodName = "/hdfs.HdfsMasterService/CreateFile"
+	HdfsMasterService_CreateFile_FullMethodName          = "/hdfs.HdfsMasterService/CreateFile"
+	HdfsMasterService_DeleteFile_FullMethodName          = "/hdfs.HdfsMasterService/DeleteFile"
+	HdfsMasterService_ReadNodesWithChunks_FullMethodName = "/hdfs.HdfsMasterService/ReadNodesWithChunks"
 )
 
 // HdfsMasterServiceClient is the client API for HdfsMasterService service.
@@ -27,6 +29,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HdfsMasterServiceClient interface {
 	CreateFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CreateFileRequest, CreateFileResponse], error)
+	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileReponse, error)
+	ReadNodesWithChunks(ctx context.Context, in *NodesWithChunksRequest, opts ...grpc.CallOption) (*NodesWithChunksResponse, error)
 }
 
 type hdfsMasterServiceClient struct {
@@ -50,11 +54,33 @@ func (c *hdfsMasterServiceClient) CreateFile(ctx context.Context, opts ...grpc.C
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HdfsMasterService_CreateFileClient = grpc.ClientStreamingClient[CreateFileRequest, CreateFileResponse]
 
+func (c *hdfsMasterServiceClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileReponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteFileReponse)
+	err := c.cc.Invoke(ctx, HdfsMasterService_DeleteFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hdfsMasterServiceClient) ReadNodesWithChunks(ctx context.Context, in *NodesWithChunksRequest, opts ...grpc.CallOption) (*NodesWithChunksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NodesWithChunksResponse)
+	err := c.cc.Invoke(ctx, HdfsMasterService_ReadNodesWithChunks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HdfsMasterServiceServer is the server API for HdfsMasterService service.
 // All implementations must embed UnimplementedHdfsMasterServiceServer
 // for forward compatibility.
 type HdfsMasterServiceServer interface {
 	CreateFile(grpc.ClientStreamingServer[CreateFileRequest, CreateFileResponse]) error
+	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileReponse, error)
+	ReadNodesWithChunks(context.Context, *NodesWithChunksRequest) (*NodesWithChunksResponse, error)
 	mustEmbedUnimplementedHdfsMasterServiceServer()
 }
 
@@ -67,6 +93,12 @@ type UnimplementedHdfsMasterServiceServer struct{}
 
 func (UnimplementedHdfsMasterServiceServer) CreateFile(grpc.ClientStreamingServer[CreateFileRequest, CreateFileResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method CreateFile not implemented")
+}
+func (UnimplementedHdfsMasterServiceServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileReponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
+}
+func (UnimplementedHdfsMasterServiceServer) ReadNodesWithChunks(context.Context, *NodesWithChunksRequest) (*NodesWithChunksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadNodesWithChunks not implemented")
 }
 func (UnimplementedHdfsMasterServiceServer) mustEmbedUnimplementedHdfsMasterServiceServer() {}
 func (UnimplementedHdfsMasterServiceServer) testEmbeddedByValue()                           {}
@@ -96,13 +128,58 @@ func _HdfsMasterService_CreateFile_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HdfsMasterService_CreateFileServer = grpc.ClientStreamingServer[CreateFileRequest, CreateFileResponse]
 
+func _HdfsMasterService_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HdfsMasterServiceServer).DeleteFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HdfsMasterService_DeleteFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HdfsMasterServiceServer).DeleteFile(ctx, req.(*DeleteFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HdfsMasterService_ReadNodesWithChunks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NodesWithChunksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HdfsMasterServiceServer).ReadNodesWithChunks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HdfsMasterService_ReadNodesWithChunks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HdfsMasterServiceServer).ReadNodesWithChunks(ctx, req.(*NodesWithChunksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HdfsMasterService_ServiceDesc is the grpc.ServiceDesc for HdfsMasterService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var HdfsMasterService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "hdfs.HdfsMasterService",
 	HandlerType: (*HdfsMasterServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "DeleteFile",
+			Handler:    _HdfsMasterService_DeleteFile_Handler,
+		},
+		{
+			MethodName: "ReadNodesWithChunks",
+			Handler:    _HdfsMasterService_ReadNodesWithChunks_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "CreateFile",
@@ -286,5 +363,107 @@ var HdfsDataNodeService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
+	Metadata: "hdfs.proto",
+}
+
+const (
+	HdfsChunkService_SendChunk_FullMethodName = "/hdfs.HdfsChunkService/SendChunk"
+)
+
+// HdfsChunkServiceClient is the client API for HdfsChunkService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type HdfsChunkServiceClient interface {
+	SendChunk(ctx context.Context, in *SendChunkRequest, opts ...grpc.CallOption) (*SendChunkRespose, error)
+}
+
+type hdfsChunkServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewHdfsChunkServiceClient(cc grpc.ClientConnInterface) HdfsChunkServiceClient {
+	return &hdfsChunkServiceClient{cc}
+}
+
+func (c *hdfsChunkServiceClient) SendChunk(ctx context.Context, in *SendChunkRequest, opts ...grpc.CallOption) (*SendChunkRespose, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendChunkRespose)
+	err := c.cc.Invoke(ctx, HdfsChunkService_SendChunk_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HdfsChunkServiceServer is the server API for HdfsChunkService service.
+// All implementations must embed UnimplementedHdfsChunkServiceServer
+// for forward compatibility.
+type HdfsChunkServiceServer interface {
+	SendChunk(context.Context, *SendChunkRequest) (*SendChunkRespose, error)
+	mustEmbedUnimplementedHdfsChunkServiceServer()
+}
+
+// UnimplementedHdfsChunkServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedHdfsChunkServiceServer struct{}
+
+func (UnimplementedHdfsChunkServiceServer) SendChunk(context.Context, *SendChunkRequest) (*SendChunkRespose, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendChunk not implemented")
+}
+func (UnimplementedHdfsChunkServiceServer) mustEmbedUnimplementedHdfsChunkServiceServer() {}
+func (UnimplementedHdfsChunkServiceServer) testEmbeddedByValue()                          {}
+
+// UnsafeHdfsChunkServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to HdfsChunkServiceServer will
+// result in compilation errors.
+type UnsafeHdfsChunkServiceServer interface {
+	mustEmbedUnimplementedHdfsChunkServiceServer()
+}
+
+func RegisterHdfsChunkServiceServer(s grpc.ServiceRegistrar, srv HdfsChunkServiceServer) {
+	// If the following call pancis, it indicates UnimplementedHdfsChunkServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&HdfsChunkService_ServiceDesc, srv)
+}
+
+func _HdfsChunkService_SendChunk_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendChunkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HdfsChunkServiceServer).SendChunk(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HdfsChunkService_SendChunk_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HdfsChunkServiceServer).SendChunk(ctx, req.(*SendChunkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// HdfsChunkService_ServiceDesc is the grpc.ServiceDesc for HdfsChunkService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var HdfsChunkService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "hdfs.HdfsChunkService",
+	HandlerType: (*HdfsChunkServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SendChunk",
+			Handler:    _HdfsChunkService_SendChunk_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "hdfs.proto",
 }

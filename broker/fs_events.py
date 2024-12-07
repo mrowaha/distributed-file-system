@@ -4,7 +4,7 @@ from uuid import uuid4
 from enum import Enum
 import json
 from broker_logger import logger
-from typing import Union
+from typing import Union, Sequence
 import os
 import time
 import requests
@@ -24,6 +24,9 @@ class FsEventStore:
         self.fsStream : str = f"brokerfs@{self.fsStreamVersion}"
         self.originalStreamPosition : Union[int, esdbclient.StreamState] = esdbclient.StreamState.NO_STREAM
 
+    def events(self) -> Sequence[esdbclient.RecordedEvent]:
+        return self.esdb.get_stream(self.fsStream)
+
     def createProjectionState(self) -> bool:
         try:
             self.esdb.create_projection(
@@ -34,18 +37,19 @@ class FsEventStore:
         except esdbexceptions.AlreadyExists:
             return False
 
-    def countProjectionState(self) -> None:
-        logger.info("getting projection state")
+    def currentState(self) -> Union[any, None]:
         response = requests.get(
             f"http://localhost:2113/projection/{FsEventStore.SnapshotProjection}/state",
             auth=("admin", "changeit"),
         )
 
         if response.status_code == 200:
-            print("Projection state:")
-            print(response.json())
+            if int(response.headers["Content-Length"]) == 0:
+                return []
+            return response.json()
         else:
-            print(f"Failed to query projection: {response.text}")
+            logger.error(f"failed to query projection: {response.text}")
+            return None
 
 
     @property
@@ -68,8 +72,19 @@ class FsEventStore:
                 return [];
             },
             create_file: function(state, event) {
-                if (state.indexOf(event.data.file_name) === -1) {
-                    state.push(event.data.file_name);  // Only push if event.data is not already in the state
+                const existingFile = state.find(file => file.file_name === event.data.file_name);
+                if (!existingFile) {
+                    state.push({
+                        file_name: event.data.file_name,
+                        total_chunks: event.data.total_chunks || 0
+                    });
+                }
+                return state;
+            },
+            delete_file: function(state, event) {
+                const index = state.findIndex(file => file.file_name === event.data.file_name);
+                if (index > -1) {
+                    state.splice(index, 1);
                 }
                 return state;
             }
@@ -108,10 +123,31 @@ class FsEventStore:
             logger.info("latest event cannot be extracted, steam is deleted")
             return None
 
-    def createFile(self, fileName: str):
+    def createFile(self, fileName: str, totalChunks: int):
+        logger.info(f"creating file, {fileName}")
         event = esdbclient.NewEvent(
             id=uuid4(),
             type=FsEvent.CREATE_FILE.value,
+            data=bytes(json.dumps({"file_name": fileName, "total_chunks": totalChunks}), encoding='utf-8')
+        )
+        try:
+            self.esdb.append_to_stream(
+                stream_name=self.fsStream,
+                events=[event],
+                current_version=esdbclient.StreamState.ANY
+            )
+        except esdbexceptions.NotFound:
+            self.esdb.append_to_stream(
+                stream_name=self.fsStream,
+                events=[event],
+                current_version=esdbclient.StreamState.NO_STREAM
+        )
+            
+    def deleteFile(self, fileName: str):
+        logger.info(f"delete file, {fileName}")
+        event = esdbclient.NewEvent(
+            id=uuid4(),
+            type=FsEvent.DELETE_FILE.value,
             data=bytes(json.dumps({"file_name": fileName}), encoding='utf-8')
         )
         try:

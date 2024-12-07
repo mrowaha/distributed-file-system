@@ -2,6 +2,6 @@ package master
 
 type HdfsMasterService interface {
 	Listen(string) error
-	Serve() error
+	Serve()
 	NotifyBroker(event int, data ...interface{})
 }
